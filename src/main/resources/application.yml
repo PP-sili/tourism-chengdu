@@ -1,0 +1,48 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: tourism-chengdu
+  config:
+    import: optional:classpath:application-local.yml
+  datasource:
+    url: jdbc:mysql://localhost:3306/tourism_chengdu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+  type-aliases-package: org.example.tourismchengdu.entity
+
+app:
+  jwt:
+    secret: tourism-chengdu-jwt-secret-key-change-in-production-2026
+    expire-hours: 168
+  upload:
+    base-dir: uploads
+    url-prefix: /uploads/
+    allowed-content-types: image/jpeg,image/png,image/webp,image/gif
+    max-size-mb: 5
+  weather:
+    qweather-key: fc6d413730264c859bc86f0ca8eee2af
+    location: 101270101
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha

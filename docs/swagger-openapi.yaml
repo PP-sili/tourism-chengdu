@@ -1,0 +1,2056 @@
+openapi: 3.0.3
+info:
+  title: 成都文旅景点导览与票务系统 API
+  description: |
+    成都文旅后端 REST API 文档（供鸿蒙端对接）
+    - Base URL: http://localhost:8082
+    - Content-Type: application/json（上传接口除外）
+    - 在线 Swagger UI: http://localhost:8082/swagger-ui.html
+    - 除公开接口外，请在请求头携带：Authorization: Bearer {token}
+  version: 1.0.0
+  contact:
+    name: tourism-chengdu
+    email: dev@example.com
+servers:
+  - url: http://localhost:8082
+    description: 本地开发环境
+tags:
+  - name: 系统
+    description: 健康检查
+  - name: 认证
+    description: 注册与登录
+  - name: 用户
+    description: 个人资料与我的页汇总
+  - name: 首页
+    description: 轮播图
+  - name: 景点
+    description: 景点列表、详情与统计
+  - name: 景点评价
+    description: 好评/差评/建议类评价
+  - name: 天气
+    description: 成都天气（Redis 缓存）
+  - name: 门票订单
+    description: 预约购票、支付、退票
+  - name: 行程
+    description: 自动生成行程与手动调整
+  - name: 上传
+    description: 图片上传（头像、帖子）
+  - name: 社区
+    description: 发帖、浏览、点赞
+  - name: 商城-商品
+    description: 纪念品浏览
+  - name: 商城-购物车
+    description: 购物车管理
+  - name: 商城-订单
+    description: 合并下单、支付、物流
+paths:
+  /api/health:
+    get:
+      tags: [系统]
+      summary: 健康检查
+      description: 公开接口，无需登录
+      security: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultMapStringString'
+  /api/auth/register:
+    post:
+      tags: [认证]
+      summary: 注册
+      description: 手机号+密码+可选昵称，公开接口
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: 成功，返回 token 和用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultLoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/auth/login:
+    post:
+      tags: [认证]
+      summary: 登录
+      description: 手机号+密码，公开接口
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 成功，返回 JWT 和用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultLoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/user/profile:
+    get:
+      tags: [用户]
+      summary: 获取个人资料
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUserProfileVO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [用户]
+      summary: 更新昵称/头像
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUserProfileVO'
+  /api/user/avatar:
+    put:
+      tags: [用户]
+      summary: 更新头像 URL
+      description: URL 必须以 /uploads/ 开头
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAvatarRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUserProfileVO'
+  /api/user/like-stats:
+    get:
+      tags: [用户]
+      summary: 我的帖子获赞总数
+      description: 只统计帖子被点赞数，与景点评价无关
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUserLikeStatsVO'
+  /api/user/overview:
+    get:
+      tags: [用户]
+      summary: 我的页汇总
+      description: 资料+订单统计+购物车+帖子
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUserOverviewVO'
+  /api/banners:
+    get:
+      tags: [首页]
+      summary: 轮播图列表
+      description: 公开接口
+      security: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListBannerVO'
+  /api/scenes:
+    get:
+      tags: [景点]
+      summary: 景点列表
+      description: 公开接口，票价为 0 的景点 bookable=false，不可预约
+      security: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListSceneListVO'
+  /api/scenes/{id}:
+    get:
+      tags: [景点]
+      summary: 景点详情
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultSceneDetailVO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/scenes/{id}/visitor-stats:
+    get:
+      tags: [景点]
+      summary: 近 7 日人流统计
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListVisitorStatItemVO'
+  /api/scenes/{id}/ticket-stats:
+    get:
+      tags: [景点]
+      summary: 近 7 日余票统计
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListTicketStatItemVO'
+  /api/scenes/{id}/evaluations:
+    get:
+      tags: [景点]
+      summary: 景点评价列表
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+        - name: type
+          in: query
+          schema:
+            type: string
+            default: all
+            enum: [all, good, bad, suggestion]
+          description: 评价类型筛选
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultEvaluationVO'
+  /api/scenes/{id}/evaluation-summary:
+    get:
+      tags: [景点]
+      summary: 景点评价统计
+      description: 公开接口，好评/差评/建议数量
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultEvaluationSummaryVO'
+  /api/scenes/{id}/available-dates:
+    get:
+      tags: [门票订单]
+      summary: 可预约日期与余票
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SceneIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultAvailableDatesVO'
+  /api/ticket/visit-slots:
+    get:
+      tags: [门票订单]
+      summary: 游玩时段列表
+      description: 返回所有可用时段编码和名称
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListVisitSlotVO'
+  /api/ticket/orders:
+    post:
+      tags: [门票订单]
+      summary: 创建门票订单
+      description: 多票种+每人身份证
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketOrderRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultTicketOrderDetailVO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [门票订单]
+      summary: 门票订单列表
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_pay, pending_use, used, refunded]
+          description: 订单状态筛选（可选）
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultTicketOrderSummaryVO'
+  /api/ticket/orders/{orderNo}:
+    get:
+      tags: [门票订单]
+      summary: 门票订单详情
+      description: 含每张票独立 qr_code
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderNoPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultTicketOrderDetailVO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/ticket/orders/{orderNo}/pay:
+    post:
+      tags: [门票订单]
+      summary: 模拟支付门票订单
+      description: 调用即支付成功
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderNoPath'
+      responses:
+        '200':
+          description: 成功，支付后行程自动生成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultTicketOrderDetailVO'
+  /api/ticket/orders/{orderNo}/refund:
+    post:
+      tags: [门票订单]
+      summary: 门票退票
+      description: 退票截止：游玩日前一日 20:00
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderNoPath'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundTicketOrderRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultTicketOrderDetailVO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/evaluations:
+    post:
+      tags: [景点评价]
+      summary: 发表评价
+      description: 每个用户对每个景点只能评价1次；收费景点需有已支付门票且游玩日期≤今天
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEvaluationRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultEvaluationVO'
+  /api/evaluations/mine:
+    get:
+      tags: [景点评价]
+      summary: 我的评价列表
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultEvaluationVO'
+  /api/evaluations/can-evaluate:
+    get:
+      tags: [景点评价]
+      summary: 检查是否可评价该景点
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sceneId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 景点 ID
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultCanEvaluateVO'
+  /api/itinerary:
+    get:
+      tags: [行程]
+      summary: 行程列表（按日期分组）
+      description: 门票支付成功后后端自动生成，无手动创建接口
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListItineraryDayVO'
+  /api/itinerary/{date}:
+    put:
+      tags: [行程]
+      summary: 更新某天行程排序与备注
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-07-30'
+          description: 行程日期 (YYYY-MM-DD)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItineraryRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultItineraryDayVO'
+  /api/upload/image:
+    post:
+      tags: [上传]
+      summary: 上传图片
+      description: multipart/form-data，字段名 file，最大 5MB。返回 URL 以 /uploads/ 开头
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 图片文件（jpeg/png/webp/gif）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultUploadImageVO'
+  /api/posts:
+    post:
+      tags: [社区]
+      summary: 发帖
+      description: 最多 9 图，可选 sceneId 关联景点
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPostDetailVO'
+    get:
+      tags: [社区]
+      summary: 帖子列表
+      description: 热度算法：like_count * 2 + view_count
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: time
+            enum: [time, hot]
+          description: 排序方式：time 按时间 / hot 按热度
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultPostSummaryVO'
+  /api/posts/mine:
+    get:
+      tags: [社区]
+      summary: 我的帖子列表
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultPostSummaryVO'
+  /api/posts/{id}:
+    get:
+      tags: [社区]
+      summary: 帖子详情
+      description: 浏览量+1，无评论功能
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPostDetailVO'
+  /api/posts/{id}/like:
+    post:
+      tags: [社区]
+      summary: 点赞/取消点赞
+      description: 切换点赞状态
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPostLikeResultVO'
+  /api/products:
+    get:
+      tags: [商城-商品]
+      summary: 商品列表
+      description: 公开接口
+      security: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: 分类筛选（可选）
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultProductSummaryVO'
+  /api/products/{id}:
+    get:
+      tags: [商城-商品]
+      summary: 商品详情
+      description: 公开接口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProductIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultProductDetailVO'
+  /api/cart:
+    get:
+      tags: [商城-购物车]
+      summary: 购物车列表
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListCartItemVO'
+    post:
+      tags: [商城-购物车]
+      summary: 加入购物车
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultCartItemVO'
+  /api/cart/{id}:
+    put:
+      tags: [商城-购物车]
+      summary: 修改购物车项数量/选中
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 购物车项 ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultCartItemVO'
+    delete:
+      tags: [商城-购物车]
+      summary: 删除购物车项
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 购物车项 ID
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultVoid'
+  /api/mall/orders:
+    post:
+      tags: [商城-订单]
+      summary: 创建商城订单（合并下单）
+      description: fromCart=true 时从已选中购物车项下单，否则使用 items 字段
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMallOrderRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultMallOrderDetailVO'
+    get:
+      tags: [商城-订单]
+      summary: 商城订单列表
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_pay, pending_ship, shipped, received]
+          description: 状态筛选（可选）
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultPageResultMallOrderSummaryVO'
+  /api/mall/orders/{orderNo}:
+    get:
+      tags: [商城-订单]
+      summary: 商城订单详情（含物流）
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderNoPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultMallOrderDetailVO'
+  /api/mall/orders/{orderNo}/pay:
+    post:
+      tags: [商城-订单]
+      summary: 模拟支付商城订单
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderNoPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultMallOrderDetailVO'
+  /api/weather/chengdu:
+    get:
+      tags: [天气]
+      summary: 成都天气
+      description: 公开接口，Redis 缓存 30 分钟
+      security: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultWeatherVO'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 登录接口返回的 token，请求头格式：Authorization: Bearer {token}
+  parameters:
+    SceneIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: 景点 ID
+    PostIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: 帖子 ID
+    ProductIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: 商品 ID
+    OrderNoPath:
+      name: orderNo
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 订单号
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: 页码，从 1 开始
+    Size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 50
+      description: 每页条数，最大 50
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResultVoid'
+          example:
+            code: 400
+            message: 请求参数错误
+            data: null
+    Unauthorized:
+      description: 未登录或登录已过期
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResultVoid'
+          example:
+            code: 401
+            message: 未登录或登录已过期
+            data: null
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResultVoid'
+          example:
+            code: 404
+            message: 资源不存在
+            data: null
+  schemas:
+    ResultVoid:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+          enum: [200, 400, 401, 403, 404, 409, 500]
+          description: |
+            状态码：
+            - 200 成功
+            - 400 请求参数错误
+            - 401 未登录或登录已过期
+            - 403 无权限
+            - 404 资源不存在
+            - 409 资源冲突
+            - 500 服务器内部错误
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          nullable: true
+      required: [code, message]
+    ResultMapStringString:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties:
+                type: string
+              example:
+                status: UP
+                service: tourism-chengdu
+    ResultLoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LoginResponse'
+    ResultUserProfileVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfileVO'
+    ResultUserLikeStatsVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserLikeStatsVO'
+    ResultUserOverviewVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserOverviewVO'
+    ResultListBannerVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/BannerVO'
+    ResultListSceneListVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/SceneListVO'
+    ResultSceneDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SceneDetailVO'
+    ResultListVisitorStatItemVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/VisitorStatItemVO'
+    ResultListTicketStatItemVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TicketStatItemVO'
+    ResultPageResultEvaluationVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PageResultEvaluationVO'
+    ResultEvaluationSummaryVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/EvaluationSummaryVO'
+    ResultEvaluationVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/EvaluationVO'
+    ResultCanEvaluateVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CanEvaluateVO'
+    ResultAvailableDatesVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AvailableDatesVO'
+    ResultListVisitSlotVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/VisitSlotVO'
+    ResultTicketOrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketOrderDetailVO'
+    ResultPageResultTicketOrderSummaryVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PageResultTicketOrderSummaryVO'
+    ResultListItineraryDayVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItineraryDayVO'
+    ResultItineraryDayVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ItineraryDayVO'
+    ResultUploadImageVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UploadImageVO'
+    ResultPostDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PostDetailVO'
+    ResultPageResultPostSummaryVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PageResultPostSummaryVO'
+    ResultPostLikeResultVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PostLikeResultVO'
+    ResultPageResultProductSummaryVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PageResultProductSummaryVO'
+    ResultProductDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ProductDetailVO'
+    ResultListCartItemVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/CartItemVO'
+    ResultCartItemVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CartItemVO'
+    ResultMallOrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MallOrderDetailVO'
+    ResultPageResultMallOrderSummaryVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PageResultMallOrderSummaryVO'
+    ResultWeatherVO:
+      allOf:
+        - $ref: '#/components/schemas/ResultVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WeatherVO'
+    LoginRequest:
+      type: object
+      required: [phone, password]
+      properties:
+        phone:
+          type: string
+          pattern: '^1\d{10}$'
+          example: '13800001111'
+          description: 手机号，11 位
+        password:
+          type: string
+          example: '123456'
+          description: 密码
+    RegisterRequest:
+      type: object
+      required: [phone, password]
+      properties:
+        phone:
+          type: string
+          pattern: '^1\d{10}$'
+          example: '13800001111'
+          description: 手机号
+        password:
+          type: string
+          minLength: 6
+          maxLength: 20
+          example: '123456'
+          description: 密码，6-20 位
+        nickname:
+          type: string
+          maxLength: 50
+          example: '熊猫爱好者'
+          description: 昵称（可选）
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Token，后续请求携带 Authorization: Bearer {token}
+        tokenType:
+          type: string
+          default: Bearer
+        user:
+          $ref: '#/components/schemas/UserProfileVO'
+    UserProfileVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        phone:
+          type: string
+          example: '13800001111'
+        nickname:
+          type: string
+          example: '熊猫爱好者'
+        avatar:
+          type: string
+          example: '/uploads/avatar1.jpg'
+          nullable: true
+        createTime:
+          type: string
+          format: date-time
+    UpdateProfileRequest:
+      type: object
+      properties:
+        nickname:
+          type: string
+          maxLength: 50
+        avatar:
+          type: string
+          maxLength: 255
+    UpdateAvatarRequest:
+      type: object
+      required: [avatar]
+      properties:
+        avatar:
+          type: string
+          maxLength: 255
+          pattern: '^/uploads/.+'
+          example: '/uploads/avatar_new.jpg'
+          description: 头像 URL，必须以 /uploads/ 开头
+    UserLikeStatsVO:
+      type: object
+      properties:
+        totalLikes:
+          type: integer
+          format: int64
+          example: 156
+          description: 帖子获赞总数（不含景点评价）
+    UserOverviewVO:
+      type: object
+      properties:
+        profile:
+          $ref: '#/components/schemas/UserProfileVO'
+        totalLikes:
+          type: integer
+          format: int64
+          example: 156
+        postCount:
+          type: integer
+          format: int64
+          example: 1
+        cartItemCount:
+          type: integer
+          format: int64
+          example: 2
+        ticketOrders:
+          $ref: '#/components/schemas/OrderStatusCountVO'
+        mallOrders:
+          $ref: '#/components/schemas/OrderStatusCountVO'
+    OrderStatusCountVO:
+      type: object
+      properties:
+        statusCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          example:
+            pending_use: 1
+            used: 1
+          description: |
+            门票状态：pending_pay / pending_use / used / refunded
+            商城状态：pending_pay / pending_ship / shipped / received
+        total:
+          type: integer
+          format: int64
+          example: 2
+    BannerVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        sceneId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 关联的景点 ID（可空）
+        imageUrl:
+          type: string
+          example: '/uploads/banner1.jpg'
+        title:
+          type: string
+        subTitle:
+          type: string
+    SceneListVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: '都江堰景区'
+        subtitle:
+          type: string
+        coverImage:
+          type: string
+        ticketPrice:
+          type: number
+          format: decimal
+          example: 80.00
+          description: 成人票价
+        studentPrice:
+          type: number
+          format: decimal
+          example: 40.00
+          description: 学生票价
+        childPrice:
+          type: number
+          format: decimal
+          example: 0.00
+          description: 儿童票价
+        address:
+          type: string
+        city:
+          type: string
+          example: '成都'
+        openTime:
+          type: string
+          example: '08:00-18:00'
+        suggestedDuration:
+          type: integer
+          example: 180
+          description: 建议游玩时长（分钟）
+        bookable:
+          type: boolean
+          example: true
+          description: 票价>0 可预约
+    SceneDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/SceneListVO'
+        - type: object
+          properties:
+            images:
+              type: array
+              items:
+                type: string
+              description: 详情图列表
+            historyText:
+              type: string
+              description: 历史文化介绍
+            contactPhone:
+              type: string
+            dailyLimit:
+              type: integer
+              description: 每日接待上限
+    VisitorStatItemVO:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        visitorCount:
+          type: integer
+          description: 游客数
+        ticketSales:
+          type: integer
+          description: 售票数
+    TicketStatItemVO:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        totalLimit:
+          type: integer
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotStockVO'
+    SlotStockVO:
+      type: object
+      properties:
+        slotCode:
+          type: string
+          example: '08:00-10:00'
+          enum: ['08:00-10:00', '10:00-12:00', '12:00-14:00', '14:00-16:00', '16:00-18:00']
+        label:
+          type: string
+          example: '上午 08:00-10:00'
+        remaining:
+          type: integer
+          description: 该时段剩余票数
+    EvaluationVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        sceneId:
+          type: integer
+          format: int64
+        sceneName:
+          type: string
+        type:
+          type: string
+          enum: [good, bad, suggestion]
+          description: 好评/差评/建议
+        content:
+          type: string
+          maxLength: 500
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 评分 1-5
+        userId:
+          type: integer
+          format: int64
+        userNickname:
+          type: string
+        userAvatar:
+          type: string
+          nullable: true
+        createTime:
+          type: string
+          format: date-time
+    CreateEvaluationRequest:
+      type: object
+      required: [sceneId, type, content]
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [good, bad, suggestion]
+        content:
+          type: string
+          maxLength: 500
+          minLength: 1
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 不传时按类型给默认值：好评 5 / 差评 2 / 建议 3
+    EvaluationSummaryVO:
+      type: object
+      properties:
+        goodCount:
+          type: integer
+          format: int64
+        badCount:
+          type: integer
+          format: int64
+        suggestionCount:
+          type: integer
+          format: int64
+        totalCount:
+          type: integer
+          format: int64
+    CanEvaluateVO:
+      type: object
+      properties:
+        canEvaluate:
+          type: boolean
+          description: 是否可评价
+        alreadyEvaluated:
+          type: boolean
+          description: 是否已评价过
+        reason:
+          type: string
+          nullable: true
+          description: 不可评价原因
+    VisitSlotVO:
+      type: object
+      properties:
+        slotCode:
+          type: string
+          example: '08:00-10:00'
+        label:
+          type: string
+          example: '上午 08:00-10:00'
+        sortOrder:
+          type: integer
+    AvailableDatesVO:
+      type: object
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        dates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DateStockVO'
+    DateStockVO:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        totalLimit:
+          type: integer
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotStockVO'
+    CreateTicketOrderRequest:
+      type: object
+      required: [sceneId, visitDate, timeSlot, contactName, contactPhone, tickets]
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        visitDate:
+          type: string
+          format: date
+          example: '2026-07-30'
+          description: 游玩日期，不能早于今天
+        timeSlot:
+          type: string
+          enum: ['08:00-10:00', '10:00-12:00', '12:00-14:00', '14:00-16:00', '16:00-18:00']
+        contactName:
+          type: string
+          maxLength: 50
+        contactPhone:
+          type: string
+          pattern: '^1\d{10}$'
+        tickets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TicketItemRequest'
+    TicketItemRequest:
+      type: object
+      required: [ticketType, visitorName, idCardNo]
+      properties:
+        ticketType:
+          type: string
+          enum: [adult, student, child]
+          description: 成人/学生/儿童
+        visitorName:
+          type: string
+          maxLength: 50
+        idCardNo:
+          type: string
+          description: 身份证号
+    RefundTicketOrderRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 255
+    TicketOrderSummaryVO:
+      type: object
+      properties:
+        orderNo:
+          type: string
+          example: 'TK202607290001'
+        sceneId:
+          type: integer
+          format: int64
+        sceneName:
+          type: string
+        visitDate:
+          type: string
+          format: date
+        visitTimeSlot:
+          type: string
+        ticketQuantity:
+          type: integer
+        totalAmount:
+          type: number
+          format: decimal
+        actualAmount:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [pending_pay, pending_use, used, refunded]
+          description: |
+            pending_pay 待支付
+            pending_use 待使用
+            used 已使用
+            refunded 已退票
+        payTime:
+          type: string
+          format: date-time
+          nullable: true
+        refundDeadline:
+          type: string
+          format: date-time
+          nullable: true
+        createTime:
+          type: string
+          format: date-time
+    TicketOrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/TicketOrderSummaryVO'
+        - type: object
+          properties:
+            contactName:
+              type: string
+            contactPhone:
+              type: string
+            tickets:
+              type: array
+              items:
+                $ref: '#/components/schemas/TicketItemVO'
+    TicketItemVO:
+      type: object
+      properties:
+        ticketId:
+          type: integer
+          format: int64
+        ticketType:
+          type: string
+          enum: [adult, student, child]
+        visitorName:
+          type: string
+        idCardNo:
+          type: string
+        unitPrice:
+          type: number
+          format: decimal
+        qrCode:
+          type: string
+          description: 票根二维码 JSON 内容，每张票独立
+        status:
+          type: string
+          description: 单张票状态
+    ItineraryDayVO:
+      type: object
+      properties:
+        visitDate:
+          type: string
+          format: date
+        note:
+          type: string
+          nullable: true
+          description: 当日备注
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItinerarySceneItemVO'
+    ItinerarySceneItemVO:
+      type: object
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        sceneName:
+          type: string
+        orderNo:
+          type: string
+        visitTimeSlot:
+          type: string
+        visitTimeSlotText:
+          type: string
+        suggestedDuration:
+          type: integer
+    UpdateItineraryRequest:
+      type: object
+      required: [sceneOrder]
+      properties:
+        sceneOrder:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+          description: 景点 ID 按期望顺序排列
+        note:
+          type: string
+          maxLength: 500
+          description: 备注
+    UploadImageVO:
+      type: object
+      properties:
+        url:
+          type: string
+          example: '/uploads/2026/07/img_abc.jpg'
+          description: 返回的图片 URL，以 /uploads/ 开头
+        originalFilename:
+          type: string
+        size:
+          type: integer
+          format: int64
+          description: 文件字节数
+    WeatherVO:
+      type: object
+      properties:
+        city:
+          type: string
+          example: '成都'
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyWeatherVO'
+    DailyWeatherVO:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        weatherText:
+          type: string
+          example: '晴'
+        tempMin:
+          type: number
+          format: double
+          example: 22.5
+        tempMax:
+          type: number
+          format: double
+          example: 30.0
+    CreatePostRequest:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+          maxLength: 100
+        content:
+          type: string
+          maxLength: 2000
+          minLength: 1
+        images:
+          type: array
+          maxItems: 9
+          items:
+            type: string
+            maxLength: 255
+          description: 最多 9 张图片 URL
+        sceneId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 关联景点 ID（可选）
+        location:
+          type: string
+          maxLength: 100
+          description: 位置信息
+    PostSummaryVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+          nullable: true
+        content:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        sceneId:
+          type: integer
+          format: int64
+          nullable: true
+        sceneName:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        viewCount:
+          type: integer
+        likeCount:
+          type: integer
+        hotScore:
+          type: integer
+          description: 热度：likeCount*2 + viewCount
+        liked:
+          type: boolean
+          description: 当前用户是否已点赞
+        createTime:
+          type: string
+          format: date-time
+        author:
+          $ref: '#/components/schemas/PostAuthorVO'
+    PostDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/PostSummaryVO'
+    PostAuthorVO:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+        nickname:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+    PostLikeResultVO:
+      type: object
+      properties:
+        liked:
+          type: boolean
+          description: 当前点赞状态
+        likeCount:
+          type: integer
+          description: 点赞总数
+    ProductSummaryVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        price:
+          type: number
+          format: decimal
+        originalPrice:
+          type: number
+          format: decimal
+          nullable: true
+        stock:
+          type: integer
+        salesCount:
+          type: integer
+        coverImage:
+          type: string
+        category:
+          type: string
+    ProductDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummaryVO'
+        - type: object
+          properties:
+            description:
+              type: string
+            images:
+              type: array
+              items:
+                type: string
+    CartItemVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        productId:
+          type: integer
+          format: int64
+        productName:
+          type: string
+        productPrice:
+          type: number
+          format: decimal
+        quantity:
+          type: integer
+        selected:
+          type: boolean
+        coverImage:
+          type: string
+        stock:
+          type: integer
+    AddCartRequest:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          minimum: 1
+    UpdateCartRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        selected:
+          type: boolean
+          nullable: true
+    CreateMallOrderRequest:
+      type: object
+      required: [receiverName, receiverPhone, receiverAddress]
+      properties:
+        receiverName:
+          type: string
+          maxLength: 50
+        receiverPhone:
+          type: string
+          pattern: '^1\d{10}$'
+        receiverAddress:
+          type: string
+          maxLength: 255
+        remark:
+          type: string
+          maxLength: 255
+        fromCart:
+          type: boolean
+          description: true 时从购物车已选项合并下单
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MallOrderItemRequest'
+          description: fromCart=false 时必填
+    MallOrderItemRequest:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          minimum: 1
+    MallOrderSummaryVO:
+      type: object
+      properties:
+        orderNo:
+          type: string
+          example: 'SC202607290001'
+        totalAmount:
+          type: number
+          format: decimal
+        actualAmount:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [pending_pay, pending_ship, shipped, received]
+          description: |
+            pending_pay 待支付
+            pending_ship 待发货
+            shipped 已发货
+            received 已收货
+        statusText:
+          type: string
+          example: '已发货'
+        payTime:
+          type: string
+          format: date-time
+          nullable: true
+        createTime:
+          type: string
+          format: date-time
+    MallOrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/MallOrderSummaryVO'
+        - type: object
+          properties:
+            receiverName:
+              type: string
+            receiverPhone:
+              type: string
+            receiverAddress:
+              type: string
+            logisticsNo:
+              type: string
+              nullable: true
+              description: 物流单号，后台改库设置
+            remark:
+              type: string
+              nullable: true
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MallOrderItemVO'
+    MallOrderItemVO:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+        productName:
+          type: string
+        productPrice:
+          type: number
+          format: decimal
+        quantity:
+          type: integer
+        subtotal:
+          type: number
+          format: decimal
+          description: productPrice * quantity
+    PageResultEvaluationVO:
+      $ref: '#/components/schemas/PageResultTemplate'
+      x-items:
+        $ref: '#/components/schemas/EvaluationVO'
+    PageResultTicketOrderSummaryVO:
+      $ref: '#/components/schemas/PageResultTemplate'
+      x-items:
+        $ref: '#/components/schemas/TicketOrderSummaryVO'
+    PageResultPostSummaryVO:
+      $ref: '#/components/schemas/PageResultTemplate'
+      x-items:
+        $ref: '#/components/schemas/PostSummaryVO'
+    PageResultProductSummaryVO:
+      $ref: '#/components/schemas/PageResultTemplate'
+      x-items:
+        $ref: '#/components/schemas/ProductSummaryVO'
+    PageResultMallOrderSummaryVO:
+      $ref: '#/components/schemas/PageResultTemplate'
+      x-items:
+        $ref: '#/components/schemas/MallOrderSummaryVO'
+    PageResultTemplate:
+      type: object
+      properties:
+        list:
+          type: array
+          items: {}
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        size:
+          type: integer
